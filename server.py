@@ -8,6 +8,7 @@ import logging
 import threading
 from messager import WeComMessenger
 from WXBizMsgCrypt3 import WXBizMsgCrypt   # https://github.com/sbzhu/weworkapi_python project URL
+from callbacks import dispatch
 
 def load_config():
     with open("config.toml", "r") as f:
@@ -126,12 +127,14 @@ def on_message(request, i):
             name = name_xml[0].childNodes[0].data        # Sender ID
             msg = msg_xml[0].childNodes[0].data          # Message content
             logger.info(f"[ch{i}] {name}:{msg}")
+            dispatch(name, msg_type, msg)
             # threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{msg}' '{i}' '0'",)).start()
             
         elif msg_type == "image": # Image message
             name = name_xml[0].childNodes[0].data
             pic_url = pic_xml[0].childNodes[0].data
             logger.info(f"[ch{i}] {name}:Image message")
+            dispatch(name, msg_type, pic_url)
             # threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{pic_url}' '{i}' '1'",)).start()
  
         return "ok"
