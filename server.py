@@ -1,14 +1,11 @@
 #-*- encoding:utf-8 -*-
-from flask import abort, request, Response
-from flask import Flask
+from flask import Flask, request, Response
 from xml.dom.minidom import parseString
-import _thread
-import time
 import os
+import threading
 import toml
+import logging
 from wecom import WeComMessenger
-# import sys
-# sys.path.append("weworkapi_python/callback")  # Correct module import path
 from WXBizMsgCrypt3 import WXBizMsgCrypt   # https://github.com/sbzhu/weworkapi_python project URL
 
 def load_config():
@@ -26,6 +23,9 @@ CALLBACK_ENCODING_AES_KEY = config["callback"]["encoding_aes_key"]
 CALLBACK_CORPID = config["callback"]["corpid"]
 SEND_TOKENS = config["send"]["tokens"]
 SEND_TOKENS = set(SEND_TOKENS)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -94,11 +94,11 @@ def signature(request, i):
     nonce = request.args.get('nonce', '')
     echo_str = request.args.get('echostr', '')
     ret,sEchoStr=qy_api[i].VerifyURL(msg_signature, timestamp,nonce,echo_str)
-    if (ret != 0):
-        print("ERR: VerifyURL ret: " + str(ret))
-        return("failed")
+    if ret != 0:
+        logger.error("ERR: VerifyURL ret: " + str(ret))
+        return "failed"
     else:
-        return(sEchoStr)
+        return sEchoStr
  
 # Actual message receiving
 def signature2(request, i):
@@ -107,35 +107,33 @@ def signature2(request, i):
     nonce = request.args.get('nonce', '')
     data = request.data.decode('utf-8')
     ret,sMsg=qy_api[i].DecryptMsg(data,msg_signature, timestamp,nonce)
-    if (ret != 0):
-        print("ERR: DecryptMsg ret: " + str(ret))
-        return("failed")
+    if ret != 0:
+        logger.error("ERR: DecryptMsg ret: " + str(ret))
+        return "failed"
     else:
-        with open ("/var/log/qywx.log", 'a+') as f: # Message receiving log
-            doc = parseString(sMsg)
-            collection = doc.documentElement
-            name_xml = collection.getElementsByTagName("FromUserName")
-            msg_xml = collection.getElementsByTagName("Content")
-            type_xml = collection.getElementsByTagName("MsgType")
-            pic_xml = collection.getElementsByTagName("PicUrl")
-            msg = ""
-            name = ""
-            msg_type = type_xml[0].childNodes[0].data
-            if msg_type == "text": # Text message
-                name = name_xml[0].childNodes[0].data        # Sender ID
-                msg = msg_xml[0].childNodes[0].data          # Message content
-                f.write(time.strftime('[%Y-%m-%d %H:%M:%S]') + "[ch%d] %s:%s\n" % (i, name, msg))
-                _thread.start_new_thread(os.system, ("python3 command.py '%s' '%s' '%d' '%d'" % (name, msg, i, 0), )) # Process message with external business logic
-                
-            elif msg_type == "image": # Image message
-                name = name_xml[0].childNodes[0].data
-                pic_url = pic_xml[0].childNodes[0].data
-                f.write(time.strftime('[%Y-%m-%d %H:%M:%S]') + "[ch%d] %s:Image message\n" % (i, name))
-                _thread.start_new_thread(os.system, ("python3 command.py '%s' '%s' '%d' '%d'" % (name, pic_url, i, 1), ))  # Process message with external business logic
+        doc = parseString(sMsg)
+        collection = doc.documentElement
+        name_xml = collection.getElementsByTagName("FromUserName")
+        msg_xml = collection.getElementsByTagName("Content")
+        type_xml = collection.getElementsByTagName("MsgType")
+        pic_xml = collection.getElementsByTagName("PicUrl")
+        msg = ""
+        name = ""
+        msg_type = type_xml[0].childNodes[0].data
+        
+        if msg_type == "text": # Text message
+            name = name_xml[0].childNodes[0].data        # Sender ID
+            msg = msg_xml[0].childNodes[0].data          # Message content
+            logger.info(f"[ch{i}] {name}:{msg}")
+            threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{msg}' '{i}' '0'",)).start()
+            
+        elif msg_type == "image": # Image message
+            name = name_xml[0].childNodes[0].data
+            pic_url = pic_xml[0].childNodes[0].data
+            logger.info(f"[ch{i}] {name}:Image message")
+            threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{pic_url}' '{i}' '1'",)).start()
  
-            f.close()
+        return "ok"
  
-        return("ok")
- 
-if __name__=='__main__':
+if __name__ == '__main__':
     app.run(SERVER_HOST, SERVER_PORT)  # Local listening port, customizable
