@@ -6,6 +6,7 @@ import _thread
 import time
 import os
 import toml
+from wecom import WeComMessenger
 # import sys
 # sys.path.append("weworkapi_python/callback")  # Correct module import path
 from WXBizMsgCrypt3 import WXBizMsgCrypt   # https://github.com/sbzhu/weworkapi_python project URL
@@ -17,11 +18,14 @@ def load_config():
 # Load config and assign to global variables
 config = load_config()
 HOOK_PATH = config["server"]["hook_path"]
+SEND_PATH = config["send"]["path"]
 SERVER_HOST = config["server"]["host"]
 SERVER_PORT = config["server"]["port"]
 CALLBACK_TOKEN = config["callback"]["token"]
 CALLBACK_ENCODING_AES_KEY = config["callback"]["encoding_aes_key"]
 CALLBACK_CORPID = config["callback"]["corpid"]
+SEND_TOKENS = config["send"]["tokens"]
+SEND_TOKENS = set(SEND_TOKENS)
 
 app = Flask(__name__)
 
@@ -43,7 +47,46 @@ qy_api = [
         CALLBACK_CORPID
     ), 
 ] # Corresponds to token, EncodingAESKey in message callback mode and enterprise ID
- 
+
+@app.route(SEND_PATH, methods=['POST'])
+def send_message():
+    # Get request data
+    data = request.get_json()
+    if not data:
+        return Response("No JSON data provided", status=400)
+    
+    # Validate required fields
+    required_fields = ['to_user', 'msg', 'token']
+    for field in required_fields:
+        if field not in data:
+            return Response(f"Missing required field: {field}", status=400)
+    
+    # Validate token
+    if data['token'] not in SEND_TOKENS:
+        return Response("Invalid token", status=401)
+    
+    try:
+        # Initialize messenger and send message
+        messenger = WeComMessenger()
+        text_content = {
+            "content": data['msg']
+        }
+        result = messenger.send_message(
+            msgtype="text",
+            touser=data['to_user'],
+            content=text_content,
+            safe=0
+        )
+        
+        if result.get("errcode") == 0:
+            resp = f'Message sent successfully, details: {result}'
+            return Response(resp, status=200)
+        else:
+            return Response(f"Failed to send message: {result.get('errmsg')}", status=500)
+            
+    except Exception as e:
+        return Response(f"Error sending message: {str(e)}", status=500)
+
 # Verify interface connectivity when enabling message receiving mode
 def signature(request, i): 
     msg_signature = request.args.get('msg_signature', '')
