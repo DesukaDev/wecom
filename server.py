@@ -2,9 +2,10 @@
 from flask import Flask, request, Response
 from xml.dom.minidom import parseString
 import os
-import threading
+import json
 import toml
 import logging
+import threading
 from messager import WeComMessenger
 from WXBizMsgCrypt3 import WXBizMsgCrypt   # https://github.com/sbzhu/weworkapi_python project URL
 
@@ -29,12 +30,14 @@ app = Flask(__name__)
 
 # URL for message callback mode in step 4. If domain is 'www.example.com', the URL in step 4 would be "http://www.example.com/hook_path"
 @app.route("/recv", methods=['GET','POST']) 
-def douban() -> Response:
-    if request.method == 'GET':
+def receive_message() -> Response:
+    if request.method == 'GET': # Verify interface connectivity
         echo_str = signature(request, 0)
+        logger.info(f"Received GET request, echo_str: {echo_str}")
         return Response(echo_str)
-    elif request.method == 'POST':
-        echo_str = signature2(request, 0)
+    elif request.method == 'POST': # Actual message receiving
+        echo_str = on_message(request, 0)
+        logger.info(f"Received POST request, echo_str: {echo_str}")
         return Response(echo_str)
     return Response("Method not allowed", status=405)
  
@@ -77,7 +80,7 @@ def send_message():
         )
         
         if result.get("errcode") == 0:
-            resp = f'Message sent successfully, details: {result}'
+            resp = f'Message sent successfully, details: {json.dumps(result, indent=2)}'
             return Response(resp, status=200)
         else:
             return Response(f"Failed to send message: {result.get('errmsg')}", status=500)
@@ -99,7 +102,7 @@ def signature(request, i):
         return sEchoStr
  
 # Actual message receiving
-def signature2(request, i):
+def on_message(request, i):
     msg_signature = request.args.get('msg_signature', '')
     timestamp = request.args.get('timestamp', '')
     nonce = request.args.get('nonce', '')
@@ -123,13 +126,13 @@ def signature2(request, i):
             name = name_xml[0].childNodes[0].data        # Sender ID
             msg = msg_xml[0].childNodes[0].data          # Message content
             logger.info(f"[ch{i}] {name}:{msg}")
-            threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{msg}' '{i}' '0'",)).start()
+            # threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{msg}' '{i}' '0'",)).start()
             
         elif msg_type == "image": # Image message
             name = name_xml[0].childNodes[0].data
             pic_url = pic_xml[0].childNodes[0].data
             logger.info(f"[ch{i}] {name}:Image message")
-            threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{pic_url}' '{i}' '1'",)).start()
+            # threading.Thread(target=os.system, args=(f"python3 command.py '{name}' '{pic_url}' '{i}' '1'",)).start()
  
         return "ok"
  
