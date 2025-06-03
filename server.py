@@ -5,7 +5,7 @@ import os
 import threading
 import toml
 import logging
-from wecom import WeComMessenger
+from messager import WeComMessenger
 from WXBizMsgCrypt3 import WXBizMsgCrypt   # https://github.com/sbzhu/weworkapi_python project URL
 
 def load_config():
@@ -14,8 +14,6 @@ def load_config():
 
 # Load config and assign to global variables
 config = load_config()
-HOOK_PATH = config["server"]["hook_path"]
-SEND_PATH = config["send"]["path"]
 SERVER_HOST = config["server"]["host"]
 SERVER_PORT = config["server"]["port"]
 CALLBACK_TOKEN = config["callback"]["token"]
@@ -30,7 +28,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # URL for message callback mode in step 4. If domain is 'www.example.com', the URL in step 4 would be "http://www.example.com/hook_path"
-@app.route(HOOK_PATH, methods=['GET','POST']) 
+@app.route("/recv", methods=['GET','POST']) 
 def douban() -> Response:
     if request.method == 'GET':
         echo_str = signature(request, 0)
@@ -48,7 +46,7 @@ qy_api = [
     ), 
 ] # Corresponds to token, EncodingAESKey in message callback mode and enterprise ID
 
-@app.route(SEND_PATH, methods=['POST'])
+@app.route("/send", methods=['POST'])
 def send_message():
     # Get request data
     data = request.get_json()
